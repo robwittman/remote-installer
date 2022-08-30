@@ -1,0 +1,4 @@
+## Append samples you want in your CSV to this file as resources ##
+resources:
+- installs_v1alpha1_remoteinstallation.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples

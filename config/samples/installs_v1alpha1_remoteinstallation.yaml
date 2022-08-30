@@ -1,0 +1,6 @@
+apiVersion: installs.remote-installer.io/v1alpha1
+kind: RemoteInstallation
+metadata:
+  name: remoteinstallation-sample
+spec:
+  # TODO(user): Add fields here

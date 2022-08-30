@@ -6,4 +6,14 @@ plugins:
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: remote-installer
 repo: github.com/robwittman/remote-installer
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: remote-installer.io
+  group: installs
+  kind: RemoteInstallation
+  path: github.com/robwittman/remote-installer/api/v1alpha1
+  version: v1alpha1
 version: "3"
