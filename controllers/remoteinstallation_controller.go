@@ -54,6 +54,27 @@ type PendingInstallationRequest struct {
 	Gvk    *schema.GroupVersionKind
 }
 
+var (
+	decoder       runtime.Serializer
+	dynamicClient dynamic.Interface
+	config        *rest.Config
+)
+
+func init() {
+	decoder = yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
+
+	var err error
+	config, err = rest.InClusterConfig()
+	if err != nil {
+		panic(err.Error())
+	}
+
+	dynamicClient, err = dynamic.NewForConfig(config)
+	if err != nil {
+		panic(err.Error())
+	}
+}
+
 //+kubebuilder:rbac:groups=installs.remote-installer.io,resources=remoteinstallations,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=installs.remote-installer.io,resources=remoteinstallations/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=installs.remote-installer.io,resources=remoteinstallations/finalizers,verbs=update
@@ -70,18 +91,8 @@ type PendingInstallationRequest struct {
 func (r *RemoteInstallationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	l := log.FromContext(ctx)
 
-	// https://ymmt2005.hatenablog.com/entry/2020/04/14/An_example_of_using_dynamic_client_of_k8s.io/client-go
-	cfg, err := rest.InClusterConfig()
-	if err != nil {
-		panic(err.Error())
-	}
-	dyn, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	remoteInstallation := &installsv1alpha1.RemoteInstallation{}
-	err = r.Get(ctx, req.NamespacedName, remoteInstallation)
+	err := r.Get(ctx, req.NamespacedName, remoteInstallation)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			l.Info("Didnt find RemoteInstallation CR, ignoring..")
@@ -91,40 +102,64 @@ func (r *RemoteInstallationReconciler) Reconcile(ctx context.Context, req ctrl.R
 		return ctrl.Result{}, err
 	}
 
-	decoder := yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
-	requests, err := getRemoteResources(remoteInstallation.Spec.Url, decoder)
+	requests, err := getRemoteResources(remoteInstallation.Spec.Url)
+	if err != nil {
+		l.Error(err, "Failed getting remote resources")
+		return ctrl.Result{}, err
+	}
 
+	installations := []installsv1alpha1.Installation{}
 	for _, request := range requests {
-		mapping, err := findGVR(request.Gvk, cfg)
+
+		mapping, err := findGVR(request.Gvk, config)
 		if err != nil {
 			// log error and continue
+			l.Error(err, "Failed parsing mapping")
 			continue
 		}
+
+		var installation installsv1alpha1.Installation
 		var dr dynamic.ResourceInterface
 		if mapping.Scope.Name() == meta.RESTScopeNameNamespace {
 			// namespaced resources should specify the namespace
-			dr = dyn.Resource(mapping.Resource).Namespace(request.Object.GetNamespace())
+			dr = dynamicClient.Resource(mapping.Resource).Namespace(request.Object.GetNamespace())
+			installation = installsv1alpha1.Installation{
+				Kind:      request.Object.GetObjectKind().GroupVersionKind().String(),
+				Name:      request.Object.GetName(),
+				Namespace: request.Object.GetNamespace(),
+			}
 		} else {
 			// for cluster-wide resources
-			dr = dyn.Resource(mapping.Resource)
+			dr = dynamicClient.Resource(mapping.Resource)
+			installation = installsv1alpha1.Installation{
+				Kind: mapping.GroupVersionKind.String(),
+				Name: request.Object.GetName(),
+			}
 		}
-		fmt.Printf("Installing %s %s in namespace %s\n", request.Object.GetObjectKind(), request.Object.GetName(), request.Object.GetNamespace())
 
 		data, err := json.Marshal(request.Object)
 		if err != nil {
-			// log error and continue
+			installation.Status = installsv1alpha1.InstallStatusFailure
+			installations = append(installations, installation)
 			continue
 		}
 
-		// 7. Create or Update the object with SSA
-		//     types.ApplyPatchType indicates SSA.
-		//     FieldManager specifies the field owner ID.
 		_, err = dr.Patch(ctx, request.Object.GetName(), types.ApplyPatchType, data, metav1.PatchOptions{
 			FieldManager: "remote-installer",
 		})
 
+		if err != nil {
+			installation.Status = installsv1alpha1.InstallStatusFailure
+			installations = append(installations, installation)
+		} else {
+			installation.Status = installsv1alpha1.InstallStatusSuccess
+			installations = append(installations, installation)
+		}
+
 	}
 
+	fmt.Println(installations)
+	// TODO: Update the status of the CR with the installations
 	return ctrl.Result{}, nil
 }
 
@@ -135,7 +170,7 @@ func (r *RemoteInstallationReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		Complete(r)
 }
 
-func getRemoteResources(url string, decoder runtime.Decoder) ([]*PendingInstallationRequest, error) {
+func getRemoteResources(url string) ([]*PendingInstallationRequest, error) {
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -153,8 +188,7 @@ func getRemoteResources(url string, decoder runtime.Decoder) ([]*PendingInstalla
 		}
 
 		obj := &unstructured.Unstructured{}
-		dec := yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
-		_, gvk, err := dec.Decode([]byte(f), nil, obj)
+		_, gvk, err := decoder.Decode([]byte(f), nil, obj)
 		if err != nil {
 			// TODO: We should somehow escalate this error. For now, just swallow and move on
 			continue

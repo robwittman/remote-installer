@@ -23,15 +23,17 @@ import (
 type InstallStatus string
 
 const (
-	Success  InstallStatus = "success"
-	NotFound InstallStatus = "not_found"
-	Failure  InstallStatus = "failure"
+	InstallStatusSuccess  InstallStatus = "success"
+	InstallStatusNotFound InstallStatus = "not_found"
+	InstallStatusFailure  InstallStatus = "failure"
 )
 
 type Installation struct {
-	Resource string        `json:"resource"`
-	Status   InstallStatus `json:"status"`
-	Output   []string      `json:"logs,omitempty"`
+	Kind      string        `json:"kind"`
+	Namespace string        `json:"namespace"`
+	Name      string        `json:"name"`
+	Status    InstallStatus `json:"status"`
+	Output    []string      `json:"logs,omitempty"`
 }
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
