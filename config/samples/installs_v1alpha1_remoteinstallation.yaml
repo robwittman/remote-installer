@@ -1,6 +1,6 @@
 apiVersion: installs.remote-installer.io/v1alpha1
 kind: RemoteInstallation
 metadata:
-  name: remoteinstallation-sample
+  name: tekton
 spec:
-  # TODO(user): Add fields here
+  url: https://app.getambassador.io/yaml/emissary/3.1.0/emissary-crds.yaml

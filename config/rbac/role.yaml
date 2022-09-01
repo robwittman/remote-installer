@@ -1,0 +1,33 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - installs.remote-installer.io
+  resources:
+  - remoteinstallations
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - installs.remote-installer.io
+  resources:
+  - remoteinstallations/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - installs.remote-installer.io
+  resources:
+  - remoteinstallations/status
+  verbs:
+  - get
+  - patch
+  - update

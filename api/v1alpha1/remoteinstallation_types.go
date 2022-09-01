@@ -20,6 +20,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type InstallStatus string
+
+const (
+	Success  InstallStatus = "success"
+	NotFound InstallStatus = "not_found"
+	Failure  InstallStatus = "failure"
+)
+
+type Installation struct {
+	Resource string        `json:"resource"`
+	Status   InstallStatus `json:"status"`
+	Output   []string      `json:"logs,omitempty"`
+}
+
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
@@ -31,9 +45,8 @@ type RemoteInstallationSpec struct {
 
 // RemoteInstallationStatus defines the observed state of RemoteInstallation
 type RemoteInstallationStatus struct {
-	JobId     string `json:"jobId"`
-	JobStatus string `json:"jobStatus,omitempty"`
-	JobLogs   string `json:"jobLogs,omitempty"`
+	Status []InstallStatus `json:"status,omitempty"`
+	Logs   string          `json:"logs,omitempty"`
 }
 
 //+kubebuilder:object:root=true
